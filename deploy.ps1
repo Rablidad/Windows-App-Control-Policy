@@ -1,9 +1,8 @@
-param()
-
-$argList = @()
-foreach ($arg in $args) {
-	$argList += ('"{0}"' -f ($arg -replace '"', '\"'))
-}
+param(
+	[string]$Filename,
+	[string]$Url,
+	[string]$PolicyName
+)
 
 $isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
 	[Security.Principal.WindowsBuiltInRole]::Administrator
@@ -20,16 +19,29 @@ if (-not $isAdmin) {
 	}
 
 	$psExe = if ($PSVersionTable.PSEdition -eq 'Core') { 'pwsh.exe' } else { 'powershell.exe' }
-	$fullArgString = @(
+
+	$elevatedArgs = @(
 		'-NoProfile'
 		'-ExecutionPolicy'
 		'Bypass'
 		'-File'
-		('"{0}"' -f $scriptPath)
-	) + $argList
+		$scriptPath
+	)
+
+	if (-not [string]::IsNullOrWhiteSpace($Filename)) {
+		$elevatedArgs += @('-Filename', $Filename)
+	}
+
+	if (-not [string]::IsNullOrWhiteSpace($Url)) {
+		$elevatedArgs += @('-Url', $Url)
+	}
+
+	if (-not [string]::IsNullOrWhiteSpace($PolicyName)) {
+		$elevatedArgs += @('-PolicyName', $PolicyName)
+	}
 
 	try {
-		Start-Process -FilePath $psExe -Verb RunAs -ArgumentList $fullArgString
+		Start-Process -FilePath $psExe -Verb RunAs -ArgumentList $elevatedArgs
 		exit 0
 	}
 	catch {
@@ -39,96 +51,50 @@ if (-not $isAdmin) {
 	}
 }
 
-$filename = $null
-$url = $null
-$policyname = $null
-
-for ($i = 0; $i -lt $args.Count; $i++) {
-	switch ($args[$i].ToLower()) {
-		'--filename' {
-			if ($i + 1 -ge $args.Count) {
-				Write-Host "Missing value for --filename"
-				exit 1
-			}
-
-			$filename = $args[$i + 1]
-			$i++
-		}
-
-		'--url' {
-			if ($i + 1 -ge $args.Count) {
-				Write-Host "Missing value for --url"
-				exit 1
-			}
-
-			$url = $args[$i + 1]
-			$i++
-		}
-
-		'--policyname' {
-			if ($i + 1 -ge $args.Count) {
-				Write-Host "Missing value for --policyname"
-				exit 1
-			}
-
-			$policyname = $args[$i + 1]
-			$i++
-		}
-
-		default {
-			Write-Host "Unknown argument: $($args[$i])"
-			Write-Host "Usage:"
-			Write-Host "  .\deploy.ps1 --filename <path-to-xml> --policyname <policy name>"
-			Write-Host "  .\deploy.ps1 --url <xml-url> --policyname <policy name>"
-			exit 1
-		}
-	}
-}
-
-if (($filename -and $url) -or (-not $filename -and -not $url)) {
-	Write-Host "You must provide either --filename <path> or --url <url>, but not both."
+if (($Filename -and $Url) -or (-not $Filename -and -not $Url)) {
+	Write-Host "You must provide either -Filename <path> or -Url <url>, but not both."
 	exit 1
 }
 
-if ([string]::IsNullOrWhiteSpace($policyname)) {
-	Write-Host "You must provide a non-empty --policyname value."
+if ([string]::IsNullOrWhiteSpace($PolicyName)) {
+	Write-Host "You must provide a non-empty -PolicyName value."
 	exit 1
 }
 
 $filepath = $null
 $tempDownloadedFile = $null
 
-if ($filename) {
-	if ([string]::IsNullOrWhiteSpace($filename)) {
-		Write-Host "--filename cannot be empty."
+if ($Filename) {
+	if ([string]::IsNullOrWhiteSpace($Filename)) {
+		Write-Host "-Filename cannot be empty."
 		exit 1
 	}
 
-	if (-not (Test-Path -LiteralPath $filename)) {
-		Write-Host "File not found: $filename"
+	if (-not (Test-Path -LiteralPath $Filename)) {
+		Write-Host "File not found: $Filename"
 		exit 1
 	}
 
 	try {
-		$filepath = (Resolve-Path -LiteralPath $filename).Path
+		$filepath = (Resolve-Path -LiteralPath $Filename).Path
 	}
 	catch {
-		Write-Host "Failed to resolve file path: $filename"
+		Write-Host "Failed to resolve file path: $Filename"
 		Write-Host $_.Exception.Message
 		exit 1
 	}
 }
-elseif ($url) {
-	if ([string]::IsNullOrWhiteSpace($url)) {
-		Write-Host "--url cannot be empty."
+elseif ($Url) {
+	if ([string]::IsNullOrWhiteSpace($Url)) {
+		Write-Host "-Url cannot be empty."
 		exit 1
 	}
 
 	try {
-		$uri = [System.Uri]$url
+		$uri = [System.Uri]$Url
 	}
 	catch {
-		Write-Host "Invalid URL: $url"
+		Write-Host "Invalid URL: $Url"
 		exit 1
 	}
 
@@ -144,10 +110,10 @@ elseif ($url) {
 	$tempDownloadedFile = Join-Path $env:TEMP $xmlNameFromUrl
 
 	try {
-		$response = Invoke-WebRequest -Uri $url -OutFile $tempDownloadedFile -PassThru -UseBasicParsing
+		$response = Invoke-WebRequest -Uri $Url -OutFile $tempDownloadedFile -PassThru -UseBasicParsing
 	}
 	catch {
-		Write-Host "Failed to download URL: $url"
+		Write-Host "Failed to download URL: $Url"
 		Write-Host $_.Exception.Message
 		exit 1
 	}
@@ -216,12 +182,12 @@ if (-not (Test-Path -LiteralPath $activeDir)) {
 $tempCipPath = Join-Path $folder ($xmlBaseName + ".cip")
 
 Write-Host "XML file   : $filepath"
-Write-Host "Policy name: $policyname"
+Write-Host "Policy name: $PolicyName"
 Write-Host "Disk name  : $diskname"
 Write-Host "Temp CIP   : $tempCipPath"
 
 try {
-	Set-CIPolicyIdInfo -FilePath $filepath -PolicyName $policyname -ResetPolicyID
+	Set-CIPolicyIdInfo -FilePath $filepath -PolicyName $PolicyName -ResetPolicyID
 }
 catch {
 	Write-Host "Set-CIPolicyIdInfo failed."
@@ -297,4 +263,4 @@ catch {
 Write-Host "Policy deployed successfully."
 Write-Host "PolicyID    : $uuid"
 Write-Host "Installed   : $finalCipPath"
-pause;
+pause
