@@ -151,13 +151,6 @@
   <Signers />
   <!-- Driver Signing Scenarios  -->
   <SigningScenarios>
-    <SigningScenario Value="131" ID="ID_SIGNINGSCENARIO_DRIVERS_1" FriendlyName="Driver Signing Scenarios">
-      <ProductSigners>
-        <FileRulesRef>
-          <FileRuleRef RuleID="ID_DENY_KD_KMCI" />
-        </FileRulesRef>
-      </ProductSigners>
-    </SigningScenario>
     <SigningScenario Value="12" ID="ID_SIGNINGSCENARIO_WINDOWS" FriendlyName="User Mode Signing Scenarios">
       <ProductSigners>
         <FileRulesRef>
